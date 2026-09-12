@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eat · try it in your browser</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f4f1ea;
+    --fg: #1f1d1a;
+    --muted: #6b665e;
+    --panel: #ffffff;
+    --line: #dcd6ca;
+    --accent: #b5542a;
+    --chip: #efe9dc;
+    --chip-hover: #e5dccb;
+    --term-bg: #171512;
+    --term-fg: #e8e2d6;
+    --term-dim: #8a8478;
+    --term-err: #f28b6e;
+    --term-prompt: #9ccf7a;
+    --term-cmd: #ffffff;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121110; --fg: #ece7dd; --muted: #a39d92; --panel: #1c1a17; --line: #33302b;
+      --accent: #e0855b; --chip: #26231f; --chip-hover: #332f29;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); }
+  body { padding: 24px 20px 40px; }
+  header { max-width: 1100px; margin: 0 auto 18px; }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+  h1 code { font-family: var(--mono); font-size: 20px; color: var(--accent); }
+  header p { margin: 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+  header a { color: var(--accent); }
+  .layout { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  .terminal { background: var(--term-bg); color: var(--term-fg); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.25); overflow: hidden; font-family: var(--mono); font-size: 13.5px; line-height: 1.45; }
+  .titlebar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #262320; color: var(--term-dim); font-size: 12px; font-family: var(--sans); }
+  .titlebar .dots span { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; }
+  .titlebar .dots span:nth-child(1) { background: #ff5f57; }
+  .titlebar .dots span:nth-child(2) { background: #febc2e; }
+  .titlebar .dots span:nth-child(3) { background: #28c840; }
+  .titlebar .title { flex: 1; text-align: center; }
+  .screen { height: 62vh; min-height: 380px; overflow-y: auto; padding: 12px 16px 10px; cursor: text; }
+  .screen pre { margin: 0; font: inherit; white-space: pre-wrap; word-break: break-word; }
+  .screen .prompt { color: var(--term-prompt); }
+  .screen .cmd { color: var(--term-cmd); }
+  .screen .err { color: var(--term-err); }
+  .screen .dim { color: var(--term-dim); }
+  .screen .exit { color: var(--term-dim); font-style: italic; }
+  .inputline { display: flex; align-items: baseline; gap: 0; padding: 0 16px 14px; }
+  .inputline .prompt { color: var(--term-prompt); white-space: pre; }
+  .inputline input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--term-cmd); font: inherit; padding: 0; caret-color: var(--term-fg); }
+  .inputline input::placeholder { color: var(--term-dim); }
+
+  aside { display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-family: var(--mono); font-size: 12px; background: var(--chip); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+  .chip:hover { background: var(--chip-hover); }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btn { font-family: var(--sans); font-size: 13px; background: var(--chip); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+  .btn:hover { background: var(--chip-hover); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  .btn.danger { color: #b2331f; }
+  .note { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 8px 0 0; }
+  .note code, .card p code { font-family: var(--mono); font-size: 12px; background: var(--chip); padding: 1px 4px; border-radius: 4px; }
+  kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; background: var(--chip); }
+  textarea { width: 100%; height: 220px; font-family: var(--mono); font-size: 12px; line-height: 1.4; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; resize: vertical; }
+  .statusline { font-size: 12px; color: var(--muted); min-height: 1.2em; margin-top: 6px; }
+  .statusline.bad { color: #b2331f; }
+  ul.keys { margin: 0; padding-left: 0; list-style: none; font-size: 13px; color: var(--muted); line-height: 1.7; }
+</style>
+</head>
+<body>
+<header>
+  <h1><code>eat</code> · try it in your browser</h1>
+  <p>A faithful re-creation of the <code>./eat</code> script: the same sixty meals, the same flags, the same reroll remarks, the same occasional overthinking. Nothing leaves the page. Saved data lives in this browser instead of <code>~/.config/eat/state.json</code>.</p>
+</header>
+
+<div class="layout">
+  <section class="terminal" id="terminal">
+    <div class="titlebar"><div class="dots"><span></span><span></span><span></span></div><div class="title">zsh — eat-cli</div></div>
+    <div class="screen" id="screen"><pre id="out"></pre></div>
+    <div class="inputline"><span class="prompt" id="promptText">$ </span><input id="cmd" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="./eat" aria-label="Command"></div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>Try these</h2>
+      <div class="chips" id="chips"></div>
+      <p class="note">Click to run. <kbd>↑</kbd> <kbd>↓</kbd> recall earlier commands.</p>
+    </div>
+
+    <div class="card">
+      <h2>While it thinks</h2>
+      <ul class="keys">
+        <li><kbd>Enter</kbd> reveals the meal immediately.</li>
+        <li><kbd>Ctrl</kbd>+<kbd>C</kbd> exits the app cleanly.</li>
+        <li>Append <code>| cat</code> to simulate redirected output.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Simulator controls</h2>
+      <div class="controls">
+        <button class="btn" id="skipTime" title="Pretend two minutes passed so the next pick starts a fresh streak">Skip 2 minutes</button>
+        <button class="btn" id="clearBtn">Clear screen</button>
+        <button class="btn danger" id="wipeBtn" title="Delete the saved state.json equivalent">Wipe saved data</button>
+      </div>
+      <p class="note">Streaks are chains of picks no more than two minutes apart. Skipping time is the browser stand-in for taking a break.</p>
+    </div>
+
+    <div class="card">
+      <h2>state.json</h2>
+      <textarea id="stateBox" spellcheck="false" placeholder="(no file yet — the first pick or add creates it)"></textarea>
+      <div class="controls" style="margin-top:8px">
+        <button class="btn primary" id="saveState">Save file</button>
+        <button class="btn" id="revertState">Revert</button>
+      </div>
+      <div class="statusline" id="stateStatus"></div>
+      <p class="note">Edit it the way you would the real file. For example, set <code>"preferences": {"vegetarian": true}</code>. Invalid JSON is saved as-is and produces the real error on the next command.</p>
+    </div>
+  </aside>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- Catalog and copy, exported from the eat script ----------
+const DATA = {"MEALS":[{"id":"dumplings","name":"Crispy dumplings","minutes":15,"cheap":true,"vegetarian":false,"note":"Pan-fry frozen meat dumplings according to the package. Add chili crisp.","method":"stovetop","diet":"meat"},{"id":"noodles","name":"Peanut noodles","minutes":15,"cheap":true,"vegetarian":true,"note":"Toss noodles with peanut butter, soy sauce, and a splash of hot water.","method":"stovetop"},{"id":"eggs-toast","name":"Eggs on toast","minutes":10,"cheap":true,"vegetarian":true,"note":"Cook your eggs your favorite way. Put them on toast. Done.","method":"stovetop"},{"id":"bean-quesadilla","name":"Bean quesadilla","minutes":10,"cheap":true,"vegetarian":true,"note":"Fold canned beans and cheese into a tortilla. Toast in a pan.","method":"stovetop"},{"id":"rice-bowl","name":"Tuna rice bowl","minutes":10,"cheap":true,"vegetarian":false,"note":"Top microwave rice with canned tuna, cucumber, and spicy mayo.","method":"microwave","diet":"fish"},{"id":"tomato-pasta","name":"Tomato pasta","minutes":20,"cheap":true,"vegetarian":true,"note":"Warm canned tomatoes with garlic while the pasta cooks.","method":"stovetop"},{"id":"chickpea-wrap","name":"Chickpea wrap","minutes":10,"cheap":true,"vegetarian":true,"note":"Mash canned chickpeas with lemon and yogurt. Add to a wrap with greens.","method":"no cook"},{"id":"grilled-cheese","name":"Grilled cheese","minutes":10,"cheap":true,"vegetarian":true,"note":"Bread. Cheese. A little butter. Toast both sides until golden.","method":"stovetop"},{"id":"fried-rice","name":"Egg fried rice","minutes":15,"cheap":true,"vegetarian":true,"note":"Use chilled, properly stored cooked rice. Fry with egg and frozen peas.","method":"stovetop"},{"id":"baked-potato","name":"Microwave baked potato","minutes":15,"cheap":true,"vegetarian":true,"note":"Prick a potato, microwave until tender, then add beans and cheese.","method":"microwave"},{"id":"breakfast-dinner","name":"Breakfast for dinner","minutes":15,"cheap":true,"vegetarian":true,"note":"Scrambled eggs, toast, and whatever fruit is around.","method":"stovetop"},{"id":"couscous","name":"Lemon chickpea couscous","minutes":10,"cheap":true,"vegetarian":true,"note":"Soak instant couscous in hot water. Add canned chickpeas, lemon, and oil.","method":"kettle"},{"id":"soup","name":"Tomato soup and toast","minutes":10,"cheap":true,"vegetarian":true,"note":"Heat a vegetarian tomato soup. Make toast for dipping.","method":"stovetop"},{"id":"bean-tacos","name":"Black bean tacos","minutes":15,"cheap":true,"vegetarian":true,"note":"Warm canned black beans with cumin. Add tortillas and salsa.","method":"stovetop"},{"id":"hummus-plate","name":"Hummus snack plate","minutes":5,"cheap":false,"vegetarian":true,"note":"Hummus, pita, cucumber, olives. Arrange it like you meant to.","method":"no cook"},{"id":"chicken-wrap","name":"Chicken wrap","minutes":10,"cheap":false,"vegetarian":false,"note":"Use ready-cooked chicken, salad leaves, and your favorite sauce.","method":"no cook","diet":"poultry"},{"id":"salmon","name":"Salmon rice bowl","minutes":25,"cheap":false,"vegetarian":false,"note":"Bake a salmon fillet. Serve with rice and sliced cucumber.","method":"oven","diet":"fish"},{"id":"tofu","name":"Crispy tofu stir-fry","minutes":25,"cheap":true,"vegetarian":true,"note":"Pan-fry cubed tofu. Add frozen vegetables and soy sauce; serve with rice.","method":"stovetop"},{"id":"lentil-soup","name":"Red lentil soup","minutes":30,"cheap":true,"vegetarian":true,"note":"Simmer red lentils, canned tomatoes, cumin, and vegetable broth.","method":"stovetop"},{"id":"sheet-pan","name":"Sausage and vegetables","minutes":35,"cheap":false,"vegetarian":false,"note":"Roast sausages with chopped potatoes and peppers until cooked through.","method":"oven","diet":"meat"},{"id":"pita-pizza","name":"Pita pizza","minutes":15,"cheap":true,"vegetarian":true,"note":"Top pita with tomato sauce and mozzarella. Bake until bubbling.","method":"oven"},{"id":"omelet","name":"Cheese omelet","minutes":10,"cheap":true,"vegetarian":true,"note":"Beat eggs, cook gently, add cheese, and fold. Toast is welcome.","method":"stovetop"},{"id":"chickpea-curry","name":"Chickpea coconut curry","minutes":25,"cheap":true,"vegetarian":true,"note":"Simmer canned chickpeas with curry paste and coconut milk. Use a vegetarian paste.","method":"stovetop"},{"id":"pesto-pasta","name":"Basil and mozzarella pasta","minutes":20,"cheap":false,"vegetarian":true,"note":"Toss hot pasta with olive oil, cherry tomatoes, basil, and mozzarella.","method":"stovetop"},{"id":"burger","name":"Burger and salad","minutes":25,"cheap":false,"vegetarian":false,"note":"Cook a beef burger patty, add a bun and toppings, and put greens on the side.","method":"stovetop","diet":"meat"},{"id":"bean-toast","name":"Beans on toast","minutes":10,"cheap":true,"vegetarian":true,"note":"Heat vegetarian baked beans. Pour over toast. Add black pepper.","method":"stovetop"},{"id":"sardine-toast","name":"Sardines on toast","minutes":10,"cheap":true,"vegetarian":false,"note":"Top toast with canned sardines, lemon juice, and sliced tomato.","method":"toaster","diet":"fish"},{"id":"tortellini","name":"Spinach and cheese tortellini","minutes":15,"cheap":false,"vegetarian":true,"note":"Cook vegetarian cheese tortellini. Toss with spinach and olive oil.","method":"stovetop"},{"id":"sweet-potato","name":"Sweet potato and black bean bowl","minutes":30,"cheap":true,"vegetarian":true,"note":"Roast cubed sweet potato. Add warm canned black beans, salsa, and lime.","method":"oven"},{"id":"yogurt-bowl","name":"Savory yogurt bowl","minutes":5,"cheap":true,"vegetarian":true,"note":"Top thick yogurt with cucumber, canned chickpeas, olive oil, and herbs. Add bread.","method":"no cook"},{"id":"tomato-eggs","name":"Tomato and egg stir-fry","minutes":15,"cheap":true,"vegetarian":true,"note":"Scramble eggs, set aside, then soften chopped tomatoes in the pan. Combine and serve with microwave rice.","method":"stovetop"},{"id":"scallion-noodles","name":"Scallion noodles","minutes":10,"cheap":true,"vegetarian":true,"note":"Sizzle sliced scallions in oil. Toss with cooked noodles and soy sauce.","method":"stovetop"},{"id":"tofu-scramble","name":"Tofu scramble","minutes":15,"cheap":true,"vegetarian":true,"note":"Crumble firm tofu into a pan with turmeric and peppers. Serve on toast.","method":"stovetop"},{"id":"miso-soup","name":"Miso tofu soup","minutes":15,"cheap":true,"vegetarian":true,"note":"Warm tofu and greens in vegetable broth. Stir in miso off the heat; serve with microwave rice.","method":"stovetop"},{"id":"rice-balls","name":"Sesame rice balls","minutes":15,"cheap":true,"vegetarian":true,"note":"Use freshly cooked microwave sushi rice. Cool just enough to shape with sesame and seaweed; eat right away.","method":"microwave"},{"id":"kimchi-rice","name":"Kimchi fried rice","minutes":15,"cheap":true,"vegetarian":true,"note":"Fry vegetarian kimchi with chilled, properly stored cooked rice. Top with a cooked egg.","method":"stovetop"},{"id":"egg-rice","name":"Soy egg rice bowl","minutes":10,"cheap":true,"vegetarian":true,"note":"Top microwave rice with a fried egg, soy sauce, sesame oil, and scallions.","method":"stovetop"},{"id":"udon-soup","name":"Mushroom udon soup","minutes":15,"cheap":true,"vegetarian":true,"note":"Simmer mushrooms and ready-to-cook udon in vegetable broth with soy sauce.","method":"stovetop"},{"id":"sesame-soba","name":"Sesame soba noodles","minutes":15,"cheap":true,"vegetarian":true,"note":"Cook and rinse soba. Toss with sesame oil, soy sauce, grated carrot, and cucumber.","method":"stovetop"},{"id":"tuna-pasta","name":"Lemon tuna pasta","minutes":20,"cheap":true,"vegetarian":false,"note":"Toss cooked pasta with canned tuna, olive oil, lemon, and parsley.","method":"stovetop","diet":"fish"},{"id":"garlic-shrimp","name":"Garlic butter shrimp","minutes":15,"cheap":false,"vegetarian":false,"note":"Cook thawed shrimp with garlic and butter until opaque. Serve with microwave rice and lemon.","method":"stovetop","diet":"shellfish"},{"id":"chicken-fajitas","name":"Chicken fajitas","minutes":25,"cheap":false,"vegetarian":false,"note":"Pan-fry thin chicken strips with peppers and onion until cooked through. Serve in warm tortillas.","method":"stovetop","diet":"poultry"},{"id":"turkey-sandwich","name":"Turkey sandwich","minutes":5,"cheap":false,"vegetarian":false,"note":"Layer ready-to-eat sliced turkey, mustard, tomato, and lettuce between bread.","method":"no cook","diet":"poultry"},{"id":"banana-sandwich","name":"Peanut butter banana sandwich","minutes":5,"cheap":true,"vegetarian":true,"note":"Spread peanut butter on bread. Add sliced banana. The recipe has now ended.","method":"no cook"},{"id":"banana-oats","name":"Warm banana oats","minutes":10,"cheap":true,"vegetarian":true,"note":"Cook quick oats with milk or plant milk. Add banana, cinnamon, and a spoonful of peanut butter.","method":"stovetop"},{"id":"nachos","name":"Loaded bean nachos","minutes":15,"cheap":true,"vegetarian":true,"note":"Top tortilla chips with canned beans and cheese. Bake until melted, then add salsa.","method":"oven"},{"id":"caprese-sandwich","name":"Caprese sandwich","minutes":10,"cheap":false,"vegetarian":true,"note":"Fill bread with mozzarella, tomato, basil, and a drizzle of olive oil.","method":"no cook"},{"id":"falafel-pita","name":"Falafel pita","minutes":10,"cheap":false,"vegetarian":true,"note":"Warm ready-cooked falafel according to the package. Tuck into pita with hummus and cucumber.","method":"stovetop"},{"id":"potato-eggs","name":"Potato and egg skillet","minutes":25,"cheap":true,"vegetarian":true,"note":"Pan-fry small potato cubes until tender. Add eggs and cook until set.","method":"stovetop"},{"id":"mushroom-rice","name":"Garlic mushroom rice","minutes":15,"cheap":true,"vegetarian":true,"note":"Brown sliced mushrooms with garlic. Stir in microwave rice and a handful of spinach.","method":"stovetop"},{"id":"shakshuka","name":"Shakshuka","minutes":25,"cheap":true,"vegetarian":true,"note":"Simmer canned tomatoes with peppers and cumin. Add eggs, cover until set, and serve with bread.","method":"stovetop"},{"id":"butter-bean-stew","name":"Tomato butter bean stew","minutes":20,"cheap":true,"vegetarian":true,"note":"Simmer canned butter beans with canned tomatoes, garlic, and smoked paprika. Add toast.","method":"stovetop"},{"id":"vegetable-chili","name":"Vegetable chili","minutes":30,"cheap":true,"vegetarian":true,"note":"Simmer canned beans, tomatoes, corn, and chili powder. Serve with bread or rice.","method":"stovetop"},{"id":"bulgur-salad","name":"Lemon bulgur salad","minutes":20,"cheap":true,"vegetarian":true,"note":"Prepare quick-cooking bulgur. Toss with canned chickpeas, chopped tomato, parsley, and lemon.","method":"stovetop"},{"id":"greek-salad","name":"Greek salad with pita","minutes":10,"cheap":false,"vegetarian":true,"note":"Combine tomato, cucumber, olives, and vegetarian feta. Dress with oil and lemon; add pita.","method":"no cook"},{"id":"chicken-soup","name":"Chicken noodle soup","minutes":20,"cheap":false,"vegetarian":false,"note":"Simmer noodles and thinly sliced carrots in broth. Add ready-cooked chicken and heat through.","method":"stovetop","diet":"poultry"},{"id":"avocado-toast","name":"Avocado egg toast","minutes":10,"cheap":false,"vegetarian":true,"note":"Mash avocado onto toast. Top with a cooked egg, lemon, and black pepper.","method":"stovetop"},{"id":"lentil-rice","name":"Lentil rice bowl","minutes":10,"cheap":true,"vegetarian":true,"note":"Warm canned lentils with cumin. Spoon over microwave rice and add yogurt or tahini.","method":"microwave"},{"id":"cucumber-noodles","name":"Chilled cucumber noodles","minutes":15,"cheap":true,"vegetarian":true,"note":"Cook and rinse noodles. Toss with cucumber, rice vinegar, soy sauce, and sesame oil.","method":"stovetop"},{"id":"frozen-pizza","name":"Frozen vegetable pizza","minutes":20,"cheap":false,"vegetarian":true,"note":"Bake a vegetarian frozen pizza according to its package. You've outsourced most of the effort.","method":"oven"}],"CHAOS":["I've checked my answer. Then checked why I checked it.","A tiny imaginary chef has approved this message.","Your horoscope says: carbohydrates are a possibility.","Chosen by a rigorous process involving absolutely no rigor.","The fridge has declined to comment.","Time is a social construct. Dinner is happening.","This meal won an election. There was one voter.","Somewhere, a potato believes in you.","The algorithm is wearing a very small chef's hat.","I have considered this far more than necessary."],"TANGENTS":["Does a bowl make food more comforting? Why am I evaluating bowls?","Would adding toast resolve the uncertainty? Toast does seem unusually confident.","Maybe the real issue is texture. No, now I'm ranking crunchiness."],"REROLL_REMARKS":["Third suggestion. Your stomach has filed a complaint.","You're browsing dinner like it has customer reviews.","Five options. One dinner. You can do this.","Your fridge is starting to take this personally.","Somewhere, a perfectly good meal is being ignored.","We've now spent longer choosing than some meals take to cook.","You have enough options to open a very confused restaurant.","Ten suggestions. Your dinner now has a shortlist and a sequel.","At this point, indecision is the main course.","The food is ready to be chosen. It has been very patient.","I can pick the meal. I can't lift the fork.","One more suggestion after this. Start making eye contact with your kitchen.","Last suggestion. Next time, I go on a very small strike."]};
+const MEALS = DATA.MEALS, CHAOS = DATA.CHAOS, TANGENTS = DATA.TANGENTS, REROLL_REMARKS = DATA.REROLL_REMARKS;
+const MAX_REQUESTS = 15;
+const STREAK_SECONDS = 120;
+const FILTERS = ['quick', 'cheap', 'vegetarian'];
+const STATE_KEY = 'eat-simulator/state.json';
+const STATE_PATH = '~/.config/eat/state.json';
+
+const MAIN_USAGE = 'usage: eat [-h] [--quick] [--cheap] [--vegetarian] [--chaos]\n           {reset,add,list} ...';
+const MAIN_HELP = MAIN_USAGE + `
+
+Dinner has been decided.
+
+positional arguments:
+  {reset,add,list}
+    reset           clear the request streak and recent picks; keep personal
+                    meals and preferences
+    add             save a personal meal
+    list            show the menu, including personal meals
+
+options:
+  -h, --help        show this help message and exit
+  --quick           meals taking about 15 minutes or less
+  --cheap           budget-friendly meals
+  --vegetarian      vegetarian meals (may include eggs and dairy)
+  --chaos           add questionable reasoning to a reasonable meal
+
+Just run eat: one suggestion, then done. Run it again for another idea. Flags
+are optional.
+`;
+const ADD_USAGE = 'usage: eat add [-h] [--minutes MINUTES] [--cheap] [--vegetarian] [--note NOTE]\n               name';
+const ADD_HELP = ADD_USAGE + `
+
+positional arguments:
+  name               meal name (quote names with spaces)
+
+options:
+  -h, --help         show this help message and exit
+  --minutes MINUTES  estimated preparation time
+  --cheap            mark this meal as budget-friendly
+  --vegetarian       mark this meal as vegetarian
+  --note NOTE        a short cooking hint
+`;
+const LIST_USAGE = 'usage: eat list [-h] [--quick] [--cheap] [--vegetarian]';
+const LIST_HELP = LIST_USAGE + `
+
+options:
+  -h, --help    show this help message and exit
+  --quick       meals taking about 15 minutes or less
+  --cheap       budget-friendly meals
+  --vegetarian  vegetarian meals (may include eggs and dairy)
+`;
+const RESET_USAGE = 'usage: eat reset [-h]';
+const RESET_HELP = RESET_USAGE + `
+
+options:
+  -h, --help  show this help message and exit
+`;
+
+// ---------- Errors ----------
+class EatError extends Error {}
+class SkipThinking extends Error {}
+class KeyboardInterrupt extends Error {}
+class ParserExit extends Error { constructor(code, stdout, stderr) { super('exit'); this.code = code; this.stdout = stdout || ''; this.stderr = stderr || ''; } }
+
+// ---------- Terminal output ----------
+const out = document.getElementById('out');
+const screen = document.getElementById('screen');
+const input = document.getElementById('cmd');
+function write(text, cls) {
+  if (!text) return;
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = text;
+  out.appendChild(span);
+  screen.scrollTop = screen.scrollHeight;
+}
+const stdout = (text) => write(text);
+const stderr = (text) => write(text, 'err');
+const print = (text = '') => stdout(text + '\n');
+
+// ---------- Virtual clock (the "skip 2 minutes" control shifts it) ----------
+let clockOffset = 0;
+const now = () => Date.now() / 1000 + clockOffset;
+
+// ---------- Persistent state (localStorage stands in for state.json) ----------
+const stateBox = document.getElementById('stateBox');
+const stateStatus = document.getElementById('stateStatus');
+function readRaw() { try { return localStorage.getItem(STATE_KEY); } catch (e) { return null; } }
+function writeRaw(text) { try { localStorage.setItem(STATE_KEY, text); } catch (e) {} refreshStateBox(); }
+function removeRaw() { try { localStorage.removeItem(STATE_KEY); } catch (e) {} refreshStateBox(); }
+function refreshStateBox() { stateBox.value = readRaw() ?? ''; stateStatus.textContent = ''; stateStatus.className = 'statusline'; }
+
+const isBool = (v) => typeof v === 'boolean';
+const isInt = (v) => typeof v === 'number' && Number.isInteger(v);
+const isNum = (v) => typeof v === 'number';
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+function validText(value, limit) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!(trimmed.length > 0 && trimmed.length <= limit)) return false;
+  for (const ch of value) { const c = ch.codePointAt(0); if (c < 32 || c === 127) return false; }
+  return true;
+}
+const METHODS = [undefined, null, 'no cook', 'microwave', 'stovetop', 'oven', 'toaster', 'kettle'];
+const DIETS = [undefined, null, 'meat', 'poultry', 'fish', 'shellfish'];
+function validMeal(v) {
+  return isObj(v) && validText(v.id, 100) && validText(v.name, 80)
+    && ('minutes' in v) && (v.minutes === null || (isInt(v.minutes) && v.minutes > 0))
+    && isBool(v.cheap) && isBool(v.vegetarian)
+    && METHODS.includes(v.method) && DIETS.includes(v.diet)
+    && !(v.diet && v.vegetarian) && validText(v.note, 240);
+}
+function requireValid(cond) { if (!cond) throw new Error('Invalid saved data'); }
+function loadState() {
+  const raw = readRaw();
+  if (raw === null) return { version: 1, preferences: {}, meals: [], history: [] };
+  try {
+    const state = JSON.parse(raw);
+    requireValid(isObj(state) && isInt(state.version) && state.version === 1);
+    const prefs = state.preferences, custom = state.meals, history = state.history;
+    requireValid(prefs !== undefined && custom !== undefined && history !== undefined);
+    requireValid(isObj(prefs));
+    requireValid(Object.entries(prefs).every(([k, v]) => FILTERS.includes(k) && isBool(v)));
+    requireValid(Array.isArray(custom) && custom.every(validMeal));
+    const all = MEALS.concat(custom);
+    requireValid(new Set(all.map(m => m.id)).size === all.length);
+    requireValid(new Set(custom.map(m => casefold(m.name.trim()))).size === custom.length);
+    requireValid(Array.isArray(history));
+    requireValid(history.every(h => isObj(h) && validText(h.id, 100) && isNum(h.at)
+      && isBool(h.thought ?? false) && Number.isFinite(h.at) && h.at >= 0));
+    return state;
+  } catch (e) {
+    throw new EatError(`Can't read the saved data at ${STATE_PATH}. Fix or move that file; it has been left untouched.`);
+  }
+}
+function saveState(state) { writeRaw(JSON.stringify(state, null, 2) + '\n'); }
+const casefold = (s) => s.toLowerCase();
+
+// ---------- Core logic, mirroring the script ----------
+const choice = (arr) => arr[Math.floor(Math.random() * arr.length)];
+function menu(state) {
+  const customNames = new Set(state.meals.map(m => casefold(m.name.trim())));
+  return MEALS.filter(m => !customNames.has(casefold(m.name))).concat(state.meals);
+}
+function candidates(state, args) {
+  const prefs = state.preferences;
+  const active = {};
+  for (const key of FILTERS) active[key] = Boolean(args[key]) || Boolean(prefs[key]);
+  return menu(state).filter(m =>
+    (!active.quick || (m.minutes !== null && m.minutes <= 15))
+    && (!active.cheap || m.cheap)
+    && (!active.vegetarian || m.vegetarian));
+}
+function pick(options, history) {
+  const recent = new Set(history.slice(-5).map(h => h.id));
+  const fresh = options.filter(m => !recent.has(m.id));
+  if (fresh.length) return choice(fresh);
+  const lastSeen = new Map();
+  history.forEach((h, i) => lastSeen.set(h.id, i));
+  let best = null, bestIdx = Infinity;
+  for (const m of options) { const idx = lastSeen.has(m.id) ? lastSeen.get(m.id) : -1; if (idx < bestIdx) { best = m; bestIdx = idx; } }
+  return best;
+}
+function streakEntries(history, at) {
+  const result = []; let previous = at;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const item = history[i]; const gap = previous - item.at;
+    if (!(gap >= 0 && gap <= STREAK_SECONDS)) break;
+    result.push(item); previous = item.at;
+  }
+  return result;
+}
+const rerollCount = (history, at) => streakEntries(history, at).length + 1;
+function describe(item) {
+  const tags = [item.minutes ? `${item.minutes} min` : 'your own pace'];
+  if (item.cheap) tags.push('cheap');
+  if (item.minutes && item.minutes <= 15) tags.push('quick');
+  if (item.vegetarian) tags.push('vegetarian'); else if (item.diet) tags.push(item.diet);
+  if (item.method) tags.push(item.method);
+  if (item.id.startsWith('custom-')) tags.push('personal meal');
+  return tags.join(' · ');
+}
+function showMeal(chosen, chaos, count) {
+  print(`\n  ${chosen.name}.\n`);
+  print(`  ${chosen.note}`);
+  print(`  ${describe(chosen)}`);
+  if (chaos) print('\n  ' + choice(CHAOS));
+  if (count >= 3 && count <= MAX_REQUESTS) print('\n  ' + REROLL_REMARKS[count - 3]);
+  print();
+}
+function thinkingSteps(chosen, options) {
+  const alternatives = options.filter(m => m.id !== chosen.id);
+  const opening = alternatives.length
+    ? `Start with ${choice(alternatives).name}. Plausible. Keep that in mind.`
+    : 'One option fits. Somehow, I can still make this complicated.';
+  const practical = chosen.minutes
+    ? `About ${chosen.minutes} minutes. Finally, a number that has something to do with dinner.`
+    : "It's on the menu. That is already more concrete than my last three thoughts.";
+  return [
+    'Okay. Something to eat. This should be a small decision.',
+    opening,
+    'Wait. Is the first idea good, or just the first idea?',
+    'Maybe something familiar. Familiar is easier to picture.',
+    "But easy to picture isn't quite the same as wanting it.",
+    'I could compare every option. That would require another meal.',
+    'No. Narrow it down before this becomes a hobby.',
+    choice(TANGENTS),
+    'That has contributed absolutely nothing. Back to the food.',
+    `What about ${chosen.name}? Yes. That seems like an answer.`,
+    practical,
+    'I could keep looking. There might be a slightly better option.',
+    'There will always be a slightly better imaginary option.',
+    'Enough. This one.',
+  ];
+}
+const readingTime = (thought) => Math.max(0.9, Math.min(4.5, thought.split(/\s+/).length / 5));
+function wrap(text, width) {
+  const lines = []; let line = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && (line + ' ' + word).length > width) { lines.push(line); line = word; }
+    else line = line ? line + ' ' + word : word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+// Pauses are interruptible: Enter raises SkipThinking, Ctrl-C raises KeyboardInterrupt.
+let pending = null;
+function thinkingPause(seconds) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { pending = null; resolve(); }, seconds * 1000);
+    pending = {
+      skip() { clearTimeout(timer); pending = null; reject(new SkipThinking()); },
+      interrupt() { clearTimeout(timer); pending = null; reject(new KeyboardInterrupt()); },
+    };
+  });
+}
+async function streamThought(thought, brief = false) {
+  let streamed = 0;
+  for (const line of wrap(thought, 74)) {
+    stdout('  ');
+    const words = line.split(' ');
+    for (let start = 0; start < words.length; start += 3) {
+      const end = start + 3;
+      stdout(words.slice(start, end).join(' ') + (end < words.length ? ' ' : '\n'));
+      await thinkingPause(0.06);
+      streamed += 0.06;
+    }
+  }
+  await thinkingPause(brief ? 0.25 : Math.max(0.5, readingTime(thought) - streamed));
+  print();
+}
+async function showOverthinking(chosen, options, abbreviated) {
+  const started = performance.now();
+  print('\n  Thinking...');
+  print('  Press Enter to skip straight to the meal.');
+  print();
+  try {
+    const steps = thinkingSteps(chosen, options);
+    if (abbreviated) {
+      await streamThought(steps[0], true);
+      const unfinished = steps[1].split(' ').slice(0, 5).join(' ').replace(/[.,;:!?]+$/, '');
+      await streamThought(unfinished + '— wait. No. Dinner first.', true);
+      print("  Overthinking interrupted. Let's go with:");
+      return;
+    }
+    for (const thought of steps) await streamThought(thought);
+  } catch (e) {
+    if (e instanceof SkipThinking) { print("\n\n  Overthinking skipped. Let's go with:"); return; }
+    throw e;
+  }
+  print(`  Thought for ${((performance.now() - started) / 1000).toFixed(1)}s. Let's go with:`);
+}
+async function suggest(state, args, overthink) {
+  const options = candidates(state, args);
+  if (!options.length) throw new EatError('Nothing matches those preferences. Try easing one up.');
+  const at = now();
+  const streak = streakEntries(state.history, at);
+  const count = streak.length + 1;
+  const fullThinking = overthink && !streak.some(h => h.thought ?? false);
+  const chosen = pick(options, state.history);
+  state.history = state.history.concat([{ id: chosen.id, at, thought: fullThinking }]).slice(-30);
+  saveState(state);
+  if (overthink) await showOverthinking(chosen, options, !fullThinking);
+  showMeal(chosen, args.chaos, count);
+}
+async function runPicker(state, args, terminal) {
+  if (rerollCount(state.history, now()) > MAX_REQUESTS) {
+    throw new EatError("Fifteen suggestions. At this point you're collecting meals.\n     No more suggestions. Run ./eat reset, or take a two-minute break.");
+  }
+  if (terminal) print("\n  No idea? I've got you.");
+  const overthink = terminal && (args.chaos || Math.random() < 1 / 6);
+  await suggest(state, args, overthink);
+  return 0;
+}
+
+// ---------- argparse emulation ----------
+function resolveOption(token, longOptions, prog, usage) {
+  if (longOptions.includes(token)) return token;
+  const matches = longOptions.filter(o => o.startsWith(token));
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) throw parserError(prog, usage, `ambiguous option: ${token} could match ${matches.join(', ')}`);
+  return null;
+}
+const parserError = (prog, usage, message) => new ParserExit(2, '', `${usage}\n${prog}: error: ${message}\n`);
+const helpExit = (help) => new ParserExit(0, help, '');
+function positiveMinutes(value) {
+  if (/^\s*[+-]?\d+\s*$/.test(value)) { const n = parseInt(value, 10); if (n > 0) return n; }
+  throw new Error('minutes must be a positive whole number');
+}
+function parseArgs(argv) {
+  const ns = { quick: false, cheap: false, vegetarian: false, chaos: false, command: null };
+  const extras = [];
+  const mainLong = ['--quick', '--cheap', '--vegetarian', '--chaos', '--help'];
+  let i = 0, onlyPositional = false;
+  while (i < argv.length) {
+    const a = argv[i];
+    if (!onlyPositional && a === '--') { onlyPositional = true; i++; continue; }
+    if (!onlyPositional && a === '-h') throw helpExit(MAIN_HELP);
+    if (!onlyPositional && a.startsWith('--')) {
+      const eq = a.indexOf('='); const key = eq < 0 ? a : a.slice(0, eq); const explicit = eq < 0 ? undefined : a.slice(eq + 1);
+      const opt = resolveOption(key, mainLong, 'eat', MAIN_USAGE);
+      if (opt === null) { extras.push(a); i++; continue; }
+      if (opt === '--help') throw helpExit(MAIN_HELP);
+      if (explicit !== undefined) throw parserError('eat', MAIN_USAGE, `argument ${opt}: ignored explicit argument '${explicit}'`);
+      ns[opt.slice(2)] = true; i++; continue;
+    }
+    if (!onlyPositional && a.startsWith('-') && a.length > 1) { extras.push(a); i++; continue; }
+    if (!['reset', 'add', 'list'].includes(a)) throw parserError('eat', MAIN_USAGE, `argument command: invalid choice: '${a}' (choose from reset, add, list)`);
+    ns.command = a;
+    parseSub(a, argv.slice(i + 1), ns, extras);
+    break;
+  }
+  if (extras.length) throw parserError('eat', MAIN_USAGE, `unrecognized arguments: ${extras.join(' ')}`);
+  return ns;
+}
+const SUBS = {
+  reset: { usage: RESET_USAGE, help: RESET_HELP, flags: [], valued: [], positional: [] },
+  list:  { usage: LIST_USAGE,  help: LIST_HELP,  flags: ['--quick', '--cheap', '--vegetarian'], valued: [], positional: [] },
+  add:   { usage: ADD_USAGE,   help: ADD_HELP,   flags: ['--cheap', '--vegetarian'], valued: ['--minutes', '--note'], positional: ['name'] },
+};
+function parseSub(name, argv, ns, extras) {
+  const spec = SUBS[name], prog = `eat ${name}`;
+  const longOptions = spec.flags.concat(spec.valued, ['--help']);
+  const positionals = [];
+  let i = 0, onlyPositional = false;
+  if (name === 'add') ns.note = 'You know what to do.';
+  while (i < argv.length) {
+    const a = argv[i];
+    if (!onlyPositional && a === '--') { onlyPositional = true; i++; continue; }
+    if (!onlyPositional && a === '-h') throw helpExit(spec.help);
+    if (!onlyPositional && a.startsWith('--')) {
+      const eq = a.indexOf('='); const key = eq < 0 ? a : a.slice(0, eq); const explicit = eq < 0 ? undefined : a.slice(eq + 1);
+      const opt = resolveOption(key, longOptions, prog, spec.usage);
+      if (opt === null) { extras.push(a); i++; continue; }
+      if (opt === '--help') throw helpExit(spec.help);
+      if (spec.valued.includes(opt)) {
+        let value = explicit;
+        if (value === undefined) {
+          const next = argv[i + 1];
+          if (next === undefined || (next.startsWith('-') && next !== '-' && !/^-\d/.test(next))) throw parserError(prog, spec.usage, `argument ${opt}: expected one argument`);
+          value = next; i++;
+        }
+        if (opt === '--minutes') {
+          try { ns.minutes = positiveMinutes(value); } catch (e) { throw parserError(prog, spec.usage, `argument --minutes: ${e.message}`); }
+        } else ns.note = value;
+        i++; continue;
+      }
+      if (explicit !== undefined) throw parserError(prog, spec.usage, `argument ${opt}: ignored explicit argument '${explicit}'`);
+      ns[opt.slice(2)] = true; i++; continue;
+    }
+    if (!onlyPositional && a.startsWith('-') && a.length > 1 && !/^-\d/.test(a)) { extras.push(a); i++; continue; }
+    positionals.push(a); i++;
+  }
+  spec.positional.forEach((p, idx) => { if (positionals[idx] !== undefined) ns[p] = positionals[idx]; });
+  const missing = spec.positional.filter((p, idx) => positionals[idx] === undefined);
+  if (missing.length) throw parserError(prog, spec.usage, `the following arguments are required: ${missing.join(', ')}`);
+  extras.push(...positionals.slice(spec.positional.length));
+}
+
+// ---------- main(), mirroring the script's flow ----------
+function hex32() { const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''); }
+async function eatMain(argv, terminal) {
+  let args;
+  try { args = parseArgs(argv); }
+  catch (e) { if (e instanceof ParserExit) { stdout(e.stdout); stderr(e.stderr); return e.code; } throw e; }
+  try {
+    if (args.command && args.chaos) throw parserError('eat', MAIN_USAGE, '--chaos is for meal picks; try eat --chaos');
+    if (args.command === 'add' && args.quick) throw parserError('eat', MAIN_USAGE, 'use add --minutes 15 to mark a personal meal as quick');
+  } catch (e) { if (e instanceof ParserExit) { stderr(e.stderr); return e.code; } throw e; }
+  try {
+    const state = loadState();
+    if (args.command === 'reset') {
+      state.history = []; saveState(state);
+      print("Fresh start. I've forgotten the indecision. Your meals and preferences are safe.");
+      return 0;
+    }
+    if (args.command === 'add') {
+      if (!validText(args.name, 80) || !validText(args.note, 240)) throw new EatError('Use a name of 1–80 characters and a note of 1–240 characters, without control characters.');
+      const name = args.name.trim();
+      if (MEALS.concat(state.meals).some(m => casefold(m.name.trim()) === casefold(name))) throw new EatError(`${name} is already on the menu.`);
+      state.meals.push({ id: 'custom-' + hex32(), name, minutes: args.minutes ?? null, cheap: args.cheap, vegetarian: args.vegetarian, note: args.note.trim() });
+      saveState(state);
+      print(`Added ${name}. A future dinner problem, solved.`);
+      return 0;
+    }
+    if (args.command === 'list') {
+      const options = candidates(state, args);
+      print(`The menu · ${options.length} meals\n`);
+      for (const item of options) print(`  ${item.name} — ${describe(item)}`);
+      return 0;
+    }
+    return await runPicker(state, args, terminal);
+  } catch (e) {
+    if (e instanceof KeyboardInterrupt) { print('\n  Dinner can wait. See you soon.\n'); return 130; }
+    if (e instanceof EatError) { stderr(`eat: ${e.message}\n`); return 1; }
+    throw e;
+  }
+}
+
+// ---------- Shell layer ----------
+function tokenize(line) {
+  const tokens = []; let cur = null, quoted = false, i = 0;
+  const push = () => { if (cur !== null) tokens.push({ text: cur, quoted }); cur = null; quoted = false; };
+  while (i < line.length) {
+    const c = line[i];
+    if (c === ' ' || c === '\t') { push(); i++; continue; }
+    if (c === "'") { const j = line.indexOf("'", i + 1); if (j < 0) throw new Error("unmatched '"); cur = (cur ?? '') + line.slice(i + 1, j); quoted = true; i = j + 1; continue; }
+    if (c === '"') {
+      let j = i + 1, buf = '';
+      while (j < line.length && line[j] !== '"') {
+        if (line[j] === '\\' && j + 1 < line.length && '"\\$`'.includes(line[j + 1])) { buf += line[j + 1]; j += 2; }
+        else { buf += line[j]; j++; }
+      }
+      if (j >= line.length) throw new Error('unmatched "');
+      cur = (cur ?? '') + buf; quoted = true; i = j + 1; continue;
+    }
+    if (c === '\\' && i + 1 < line.length) { cur = (cur ?? '') + line[i + 1]; i += 2; continue; }
+    cur = (cur ?? '') + c; i++;
+  }
+  push();
+  return tokens;
+}
+const SIM_HELP = `eat simulator commands
+  ./eat [flags] [reset|add|list]   the real thing (also: eat, python3 eat)
+  ./eat --chaos | cat              append | cat or > file to simulate redirected output
+  cat ${STATE_PATH}     show the saved data
+  sleep N                          pretend N seconds passed (streaks reset after 120)
+  clear                            clear the screen
+`;
+async function runLine(line) {
+  let tokens;
+  try { tokens = tokenize(line); } catch (e) { stderr(`zsh: ${e.message}\n`); return 1; }
+  if (!tokens.length) return 0;
+  let redirected = false;
+  const cut = tokens.findIndex(t => !t.quoted && (t.text === '|' || t.text === '>' || t.text.startsWith('>')));
+  if (cut >= 0) { redirected = true; tokens = tokens.slice(0, cut); }
+  const words = tokens.map(t => t.text);
+  let head = words[0], rest = words.slice(1);
+  if ((head === 'python3' || head === 'python') && (rest[0] === 'eat' || rest[0] === './eat')) { head = './eat'; rest = rest.slice(1); }
+  if (head === 'eat' || head === './eat') return eatMain(rest, !redirected);
+  switch (head) {
+    case 'clear': out.textContent = ''; return 0;
+    case 'help': case '?': stdout(SIM_HELP); return 0;
+    case 'ls': print('README.md  eat  tests  web'); return 0;
+    case 'pwd': print('/home/you/eat-cli'); return 0;
+    case 'cat': {
+      const target = rest[0] || '';
+      if (target.endsWith('state.json')) { const raw = readRaw(); if (raw === null) { stderr(`cat: ${target}: No such file or directory\n`); return 1; } stdout(raw.endsWith('\n') ? raw : raw + '\n'); return 0; }
+      if (target === 'README.md') { print('See the README in the repository. This terminal only knows how to eat.'); return 0; }
+      stderr(`cat: ${target || 'cat'}: No such file or directory\n`); return 1;
+    }
+    case 'sleep': {
+      const n = Number(rest[0]);
+      if (!Number.isFinite(n) || n < 0) { stderr('usage: sleep seconds\n'); return 1; }
+      clockOffset += n; print(`(simulator: pretended ${n} seconds passed)`); return 0;
+    }
+    case 'chmod': return 0;
+    case 'python3': case 'python': print('Only ./eat runs in here. Clone the repo for the tests.'); return 0;
+    default: stderr(`zsh: command not found: ${head}\n`); return 127;
+  }
+}
+
+// ---------- Input handling ----------
+let busy = false;
+const history = []; let historyIndex = 0; let draft = '';
+async function submit(line) {
+  if (busy) return;
+  busy = true;
+  write('$ ', 'prompt'); write(line + '\n', 'cmd');
+  if (line.trim()) { history.push(line); }
+  historyIndex = history.length; draft = '';
+  input.value = '';
+  let code = 0;
+  try { code = await runLine(line); }
+  catch (e) { stderr(`eat: unexpected simulator error: ${e.message}\n`); code = 1; console.error(e); }
+  if (code !== 0) write(`[exit ${code}]\n`, 'exit');
+  refreshStateBox();
+  busy = false;
+  input.focus();
+}
+input.addEventListener('keydown', (e) => {
+  if (busy) {
+    if (e.key === 'Enter') { e.preventDefault(); input.value = ''; pending?.skip(); }
+    return;
+  }
+  if (e.key === 'Enter') { e.preventDefault(); submit(input.value); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); if (historyIndex === history.length) draft = input.value; if (historyIndex > 0) { historyIndex--; input.value = history[historyIndex]; } }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); if (historyIndex < history.length) { historyIndex++; input.value = historyIndex === history.length ? draft : history[historyIndex]; } }
+});
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey && (e.key === 'c' || e.key === 'C'))) return;
+  if (String(window.getSelection()).length) return;   // let copy work
+  e.preventDefault();
+  if (busy) { write('^C', 'dim'); pending?.interrupt(); }
+  else { write('$ ', 'prompt'); write(input.value + '^C\n', 'cmd'); input.value = ''; }
+});
+screen.addEventListener('mouseup', () => { if (!String(window.getSelection()).length) input.focus(); });
+
+// ---------- Sidebar ----------
+const EXAMPLES = ['./eat', './eat --chaos', './eat --quick --vegetarian', './eat list --cheap', './eat add "Mom\'s curry" --minutes 30 --note "Ask Mom."', './eat reset', './eat --help', './eat add --help', './eat | cat', 'cat ' + STATE_PATH];
+const chips = document.getElementById('chips');
+for (const ex of EXAMPLES) { const b = document.createElement('button'); b.className = 'chip'; b.textContent = ex; b.addEventListener('click', () => { input.value = ex; submit(ex); }); chips.appendChild(b); }
+document.getElementById('skipTime').addEventListener('click', () => { input.value = 'sleep 121'; submit('sleep 121'); });
+document.getElementById('clearBtn').addEventListener('click', () => { input.value = 'clear'; submit('clear'); });
+document.getElementById('wipeBtn').addEventListener('click', () => { removeRaw(); print(`(simulator: removed ${STATE_PATH})`); input.focus(); });
+document.getElementById('saveState').addEventListener('click', () => {
+  const text = stateBox.value;
+  if (!text.trim()) { removeRaw(); stateStatus.textContent = 'File removed.'; return; }
+  writeRaw(text); stateBox.value = text;
+  try { JSON.parse(text); loadState(); stateStatus.textContent = 'Saved. Valid state.'; stateStatus.className = 'statusline'; }
+  catch (e) { stateStatus.textContent = 'Saved as-is. eat will refuse to read it until fixed.'; stateStatus.className = 'statusline bad'; }
+});
+document.getElementById('revertState').addEventListener('click', refreshStateBox);
+
+// ---------- Boot ----------
+refreshStateBox();
+write('eat simulator · a browser re-creation of the ./eat script\n', 'dim');
+write('Type ./eat and press Enter. Try ./eat --help for the flags, or help for simulator commands.\n\n', 'dim');
+input.focus();
+})();
+</script>
+</body>
+</html>
