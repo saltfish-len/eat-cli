@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eat · try it in your browser</title>
+<title>eat</title>
 <style>
   html, body { margin: 0; height: 100%; background: #171512; color: #e8e2d6; }
   body { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px; line-height: 1.45; display: flex; flex-direction: column; }
@@ -470,8 +470,8 @@ function tokenize(line) {
   return tokens;
 }
 const SIM_HELP = `eat simulator commands
-  ./eat [flags] [reset|add|list]   the real thing (also: eat, python3 eat)
-  ./eat --chaos | cat              append | cat or > file to simulate redirected output
+  eat [flags] [reset|add|list]     the real thing (./eat and python3 eat work too)
+  eat --chaos | cat                append | cat or > file to simulate redirected output
   cat ${STATE_PATH}     show the saved data
   rm ${STATE_PATH}      delete the saved data
   sleep N                          pretend N seconds passed (a gap over 120 starts a fresh streak)
@@ -511,7 +511,7 @@ async function runLine(line) {
       clockOffset += n; print(`(simulator: pretended ${n} seconds passed)`); return 0;
     }
     case 'chmod': return 0;
-    case 'python3': case 'python': print('Only ./eat runs in here. Clone the repo for the tests.'); return 0;
+    case 'python3': case 'python': print('Only eat runs in here. Clone the repo for the tests.'); return 0;
     default: stderr(`zsh: command not found: ${head}\n`); return 127;
   }
 }
@@ -552,8 +552,8 @@ document.addEventListener('keydown', (e) => {
 screen.addEventListener('mouseup', () => { if (!String(window.getSelection()).length) input.focus(); });
 
 // ---------- Boot ----------
-write('eat simulator · a browser re-creation of the ./eat script\n', 'dim');
-write('Type ./eat and press Enter. Try ./eat --help for the flags, or help for simulator commands.\n\n', 'dim');
+write('eat simulator · the eat script, re-created in your browser\n', 'dim');
+write('Type eat and press Enter. Try eat --help for the flags, or help for simulator commands.\n\n', 'dim');
 input.focus();
 })();
 </script>
