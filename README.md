@@ -32,7 +32,7 @@ To call it as `eat` from any directory, put the executable in a directory alread
 
 ## Try it in your browser
 
-No Python handy? The same script is re-created as a single web page at <https://saltfish-len.github.io/eat-cli/>. It runs the same menu, flags, remarks, streak rules, and overthinking, with saved data kept in your browser instead of `~/.config/eat/state.json`. The page is `web/index.html`; open it locally or let the GitHub Pages workflow publish it from `main`.
+No Python handy? The same script is re-created as a browser terminal at <https://saltfish-len.github.io/eat-cli/>; type `eat` there. It runs the same menu, flags, remarks, streak rules, and overthinking, with saved data kept in your browser instead of `~/.config/eat/state.json`. The page is `web/index.html`; open it locally or let the GitHub Pages workflow publish it from `main`.
 
 ## Too much indecision
 
