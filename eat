@@ -1,0 +1,531 @@
+#!/usr/bin/env python3
+"""A small, opinionated answer to 'what should I eat?' — Python 3.8+, no deps."""
+
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import random
+import select
+import sys
+import tempfile
+import textwrap
+import time
+import uuid
+
+
+def meal(key, name, minutes, cheap, vegetarian, note, method=None, diet=None):
+    item = dict(id=key, name=name, minutes=minutes, cheap=cheap,
+                vegetarian=vegetarian, note=note)
+    if method is not None:
+        item["method"] = method
+    if diet is not None:
+        item["diet"] = diet
+    return item
+
+
+# Times are rough estimates; shortcuts such as cooked rice are explicit.
+MEALS = [
+    meal("dumplings", "Crispy dumplings", 15, True, False,
+         "Pan-fry frozen meat dumplings according to the package. Add chili crisp.", method='stovetop', diet='meat'),
+    meal("noodles", "Peanut noodles", 15, True, True,
+         "Toss noodles with peanut butter, soy sauce, and a splash of hot water.", method='stovetop'),
+    meal("eggs-toast", "Eggs on toast", 10, True, True,
+         "Cook your eggs your favorite way. Put them on toast. Done.", method='stovetop'),
+    meal("bean-quesadilla", "Bean quesadilla", 10, True, True,
+         "Fold canned beans and cheese into a tortilla. Toast in a pan.", method='stovetop'),
+    meal("rice-bowl", "Tuna rice bowl", 10, True, False,
+         "Top microwave rice with canned tuna, cucumber, and spicy mayo.", method='microwave', diet='fish'),
+    meal("tomato-pasta", "Tomato pasta", 20, True, True,
+         "Warm canned tomatoes with garlic while the pasta cooks.", method='stovetop'),
+    meal("chickpea-wrap", "Chickpea wrap", 10, True, True,
+         "Mash canned chickpeas with lemon and yogurt. Add to a wrap with greens.", method='no cook'),
+    meal("grilled-cheese", "Grilled cheese", 10, True, True,
+         "Bread. Cheese. A little butter. Toast both sides until golden.", method='stovetop'),
+    meal("fried-rice", "Egg fried rice", 15, True, True,
+         "Use chilled, properly stored cooked rice. Fry with egg and frozen peas.", method='stovetop'),
+    meal("baked-potato", "Microwave baked potato", 15, True, True,
+         "Prick a potato, microwave until tender, then add beans and cheese.", method='microwave'),
+    meal("breakfast-dinner", "Breakfast for dinner", 15, True, True,
+         "Scrambled eggs, toast, and whatever fruit is around.", method='stovetop'),
+    meal("couscous", "Lemon chickpea couscous", 10, True, True,
+         "Soak instant couscous in hot water. Add canned chickpeas, lemon, and oil.", method='kettle'),
+    meal("soup", "Tomato soup and toast", 10, True, True,
+         "Heat a vegetarian tomato soup. Make toast for dipping.", method='stovetop'),
+    meal("bean-tacos", "Black bean tacos", 15, True, True,
+         "Warm canned black beans with cumin. Add tortillas and salsa.", method='stovetop'),
+    meal("hummus-plate", "Hummus snack plate", 5, False, True,
+         "Hummus, pita, cucumber, olives. Arrange it like you meant to.", method='no cook'),
+    meal("chicken-wrap", "Chicken wrap", 10, False, False,
+         "Use ready-cooked chicken, salad leaves, and your favorite sauce.", method='no cook', diet='poultry'),
+    meal("salmon", "Salmon rice bowl", 25, False, False,
+         "Bake a salmon fillet. Serve with rice and sliced cucumber.", method='oven', diet='fish'),
+    meal("tofu", "Crispy tofu stir-fry", 25, True, True,
+         "Pan-fry cubed tofu. Add frozen vegetables and soy sauce; serve with rice.", method='stovetop'),
+    meal("lentil-soup", "Red lentil soup", 30, True, True,
+         "Simmer red lentils, canned tomatoes, cumin, and vegetable broth.", method='stovetop'),
+    meal("sheet-pan", "Sausage and vegetables", 35, False, False,
+         "Roast sausages with chopped potatoes and peppers until cooked through.", method='oven', diet='meat'),
+    meal("pita-pizza", "Pita pizza", 15, True, True,
+         "Top pita with tomato sauce and mozzarella. Bake until bubbling.", method='oven'),
+    meal("omelet", "Cheese omelet", 10, True, True,
+         "Beat eggs, cook gently, add cheese, and fold. Toast is welcome.", method='stovetop'),
+    meal("chickpea-curry", "Chickpea coconut curry", 25, True, True,
+         "Simmer canned chickpeas with curry paste and coconut milk. Use a vegetarian paste.", method='stovetop'),
+    meal("pesto-pasta", "Basil and mozzarella pasta", 20, False, True,
+         "Toss hot pasta with olive oil, cherry tomatoes, basil, and mozzarella.", method='stovetop'),
+    meal("burger", "Burger and salad", 25, False, False,
+         "Cook a beef burger patty, add a bun and toppings, and put greens on the side.", method='stovetop', diet='meat'),
+    meal("bean-toast", "Beans on toast", 10, True, True,
+         "Heat vegetarian baked beans. Pour over toast. Add black pepper.", method='stovetop'),
+    meal("sardine-toast", "Sardines on toast", 10, True, False,
+         "Top toast with canned sardines, lemon juice, and sliced tomato.", method='toaster', diet='fish'),
+    meal("tortellini", "Spinach and cheese tortellini", 15, False, True,
+         "Cook vegetarian cheese tortellini. Toss with spinach and olive oil.", method='stovetop'),
+    meal("sweet-potato", "Sweet potato and black bean bowl", 30, True, True,
+         "Roast cubed sweet potato. Add warm canned black beans, salsa, and lime.", method='oven'),
+    meal("yogurt-bowl", "Savory yogurt bowl", 5, True, True,
+         "Top thick yogurt with cucumber, canned chickpeas, olive oil, and herbs. Add bread.", method='no cook'),
+    meal("tomato-eggs", "Tomato and egg stir-fry", 15, True, True,
+         "Scramble eggs, set aside, then soften chopped tomatoes in the pan. Combine and serve with microwave rice.", method='stovetop'),
+    meal("scallion-noodles", "Scallion noodles", 10, True, True,
+         "Sizzle sliced scallions in oil. Toss with cooked noodles and soy sauce.", method='stovetop'),
+    meal("tofu-scramble", "Tofu scramble", 15, True, True,
+         "Crumble firm tofu into a pan with turmeric and peppers. Serve on toast.", method='stovetop'),
+    meal("miso-soup", "Miso tofu soup", 15, True, True,
+         "Warm tofu and greens in vegetable broth. Stir in miso off the heat; serve with microwave rice.", method='stovetop'),
+    meal("rice-balls", "Sesame rice balls", 15, True, True,
+         "Use freshly cooked microwave sushi rice. Cool just enough to shape with sesame and seaweed; eat right away.", method='microwave'),
+    meal("kimchi-rice", "Kimchi fried rice", 15, True, True,
+         "Fry vegetarian kimchi with chilled, properly stored cooked rice. Top with a cooked egg.", method='stovetop'),
+    meal("egg-rice", "Soy egg rice bowl", 10, True, True,
+         "Top microwave rice with a fried egg, soy sauce, sesame oil, and scallions.", method='stovetop'),
+    meal("udon-soup", "Mushroom udon soup", 15, True, True,
+         "Simmer mushrooms and ready-to-cook udon in vegetable broth with soy sauce.", method='stovetop'),
+    meal("sesame-soba", "Sesame soba noodles", 15, True, True,
+         "Cook and rinse soba. Toss with sesame oil, soy sauce, grated carrot, and cucumber.", method='stovetop'),
+    meal("tuna-pasta", "Lemon tuna pasta", 20, True, False,
+         "Toss cooked pasta with canned tuna, olive oil, lemon, and parsley.", method='stovetop', diet='fish'),
+    meal("garlic-shrimp", "Garlic butter shrimp", 15, False, False,
+         "Cook thawed shrimp with garlic and butter until opaque. Serve with microwave rice and lemon.", method='stovetop', diet='shellfish'),
+    meal("chicken-fajitas", "Chicken fajitas", 25, False, False,
+         "Pan-fry thin chicken strips with peppers and onion until cooked through. Serve in warm tortillas.", method='stovetop', diet='poultry'),
+    meal("turkey-sandwich", "Turkey sandwich", 5, False, False,
+         "Layer ready-to-eat sliced turkey, mustard, tomato, and lettuce between bread.", method='no cook', diet='poultry'),
+    meal("banana-sandwich", "Peanut butter banana sandwich", 5, True, True,
+         "Spread peanut butter on bread. Add sliced banana. The recipe has now ended.", method='no cook'),
+    meal("banana-oats", "Warm banana oats", 10, True, True,
+         "Cook quick oats with milk or plant milk. Add banana, cinnamon, and a spoonful of peanut butter.", method='stovetop'),
+    meal("nachos", "Loaded bean nachos", 15, True, True,
+         "Top tortilla chips with canned beans and cheese. Bake until melted, then add salsa.", method='oven'),
+    meal("caprese-sandwich", "Caprese sandwich", 10, False, True,
+         "Fill bread with mozzarella, tomato, basil, and a drizzle of olive oil.", method='no cook'),
+    meal("falafel-pita", "Falafel pita", 10, False, True,
+         "Warm ready-cooked falafel according to the package. Tuck into pita with hummus and cucumber.", method='stovetop'),
+    meal("potato-eggs", "Potato and egg skillet", 25, True, True,
+         "Pan-fry small potato cubes until tender. Add eggs and cook until set.", method='stovetop'),
+    meal("mushroom-rice", "Garlic mushroom rice", 15, True, True,
+         "Brown sliced mushrooms with garlic. Stir in microwave rice and a handful of spinach.", method='stovetop'),
+    meal("shakshuka", "Shakshuka", 25, True, True,
+         "Simmer canned tomatoes with peppers and cumin. Add eggs, cover until set, and serve with bread.", method='stovetop'),
+    meal("butter-bean-stew", "Tomato butter bean stew", 20, True, True,
+         "Simmer canned butter beans with canned tomatoes, garlic, and smoked paprika. Add toast.", method='stovetop'),
+    meal("vegetable-chili", "Vegetable chili", 30, True, True,
+         "Simmer canned beans, tomatoes, corn, and chili powder. Serve with bread or rice.", method='stovetop'),
+    meal("bulgur-salad", "Lemon bulgur salad", 20, True, True,
+         "Prepare quick-cooking bulgur. Toss with canned chickpeas, chopped tomato, parsley, and lemon.", method='stovetop'),
+    meal("greek-salad", "Greek salad with pita", 10, False, True,
+         "Combine tomato, cucumber, olives, and vegetarian feta. Dress with oil and lemon; add pita.", method='no cook'),
+    meal("chicken-soup", "Chicken noodle soup", 20, False, False,
+         "Simmer noodles and thinly sliced carrots in broth. Add ready-cooked chicken and heat through.", method='stovetop', diet='poultry'),
+    meal("avocado-toast", "Avocado egg toast", 10, False, True,
+         "Mash avocado onto toast. Top with a cooked egg, lemon, and black pepper.", method='stovetop'),
+    meal("lentil-rice", "Lentil rice bowl", 10, True, True,
+         "Warm canned lentils with cumin. Spoon over microwave rice and add yogurt or tahini.", method='microwave'),
+    meal("cucumber-noodles", "Chilled cucumber noodles", 15, True, True,
+         "Cook and rinse noodles. Toss with cucumber, rice vinegar, soy sauce, and sesame oil.", method='stovetop'),
+    meal("frozen-pizza", "Frozen vegetable pizza", 20, False, True,
+         "Bake a vegetarian frozen pizza according to its package. You've outsourced most of the effort.", method='oven'),
+]
+
+CHAOS = [
+    "I've checked my answer. Then checked why I checked it.",
+    "A tiny imaginary chef has approved this message.",
+    "Your horoscope says: carbohydrates are a possibility.",
+    "Chosen by a rigorous process involving absolutely no rigor.",
+    "The fridge has declined to comment.",
+    "Time is a social construct. Dinner is happening.",
+    "This meal won an election. There was one voter.",
+    "Somewhere, a potato believes in you.",
+    "The algorithm is wearing a very small chef's hat.",
+    "I have considered this far more than necessary.",
+]
+# Scripted fictional inner monologue. It does not drive the random meal selection.
+TANGENTS = [
+    "Does a bowl make food more comforting? Why am I evaluating bowls?",
+    "Would adding toast resolve the uncertainty? Toast does seem unusually confident.",
+    "Maybe the real issue is texture. No, now I'm ranking crunchiness.",
+]
+# Each request from 3 through 15 gets its own remark, without repetition in a streak.
+REROLL_REMARKS = [
+    "Third suggestion. Your stomach has filed a complaint.",
+    "You're browsing dinner like it has customer reviews.",
+    "Five options. One dinner. You can do this.",
+    "Your fridge is starting to take this personally.",
+    "Somewhere, a perfectly good meal is being ignored.",
+    "We've now spent longer choosing than some meals take to cook.",
+    "You have enough options to open a very confused restaurant.",
+    "Ten suggestions. Your dinner now has a shortlist and a sequel.",
+    "At this point, indecision is the main course.",
+    "The food is ready to be chosen. It has been very patient.",
+    "I can pick the meal. I can't lift the fork.",
+    "One more suggestion after this. Start making eye contact with your kitchen.",
+    "Last suggestion. Next time, I go on a very small strike.",
+]
+MAX_REQUESTS = 15
+STREAK_SECONDS = 120
+FILTERS = ("quick", "cheap", "vegetarian")
+
+
+class EatError(Exception):
+    pass
+
+
+class SkipThinking(Exception):
+    pass
+
+
+def state_path():
+    override = os.environ.get("EAT_HOME")
+    if override:
+        return Path(override).expanduser() / "state.json"
+    config = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(config).expanduser() if config else Path.home() / ".config"
+    return base / "eat" / "state.json"
+
+
+def valid_text(value, limit):
+    return (isinstance(value, str) and 0 < len(value.strip()) <= limit
+            and not any(ord(char) < 32 or ord(char) == 127 for char in value))
+
+
+def valid_meal(value):
+    return (isinstance(value, dict)
+            and valid_text(value.get("id"), 100)
+            and valid_text(value.get("name"), 80)
+            and "minutes" in value
+            and (value.get("minutes") is None
+                 or (type(value["minutes"]) is int and value["minutes"] > 0))
+            and all(type(value.get(key)) is bool for key in ("cheap", "vegetarian"))
+            and value.get("method") in (None, "no cook", "microwave", "stovetop", "oven", "toaster", "kettle")
+            and value.get("diet") in (None, "meat", "poultry", "fish", "shellfish")
+            and not (value.get("diet") and value["vegetarian"])
+            and valid_text(value.get("note"), 240))
+
+
+def require_valid(condition):
+    if not condition:
+        raise ValueError("Invalid saved data")
+
+
+def load_state(path):
+    if not path.exists():
+        return {"version": 1, "preferences": {}, "meals": [], "history": []}
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+        require_valid(isinstance(state, dict) and type(state.get("version")) is int
+                      and state["version"] == 1)
+        prefs, custom, history = state["preferences"], state["meals"], state["history"]
+        require_valid(isinstance(prefs, dict))
+        require_valid(all(key in FILTERS and type(value) is bool for key, value in prefs.items()))
+        require_valid(isinstance(custom, list) and all(valid_meal(item) for item in custom))
+        all_meals = MEALS + custom
+        require_valid(len({item["id"] for item in all_meals}) == len(all_meals))
+        require_valid(len({item["name"].strip().casefold() for item in custom}) == len(custom))
+        require_valid(isinstance(history, list))
+        require_valid(all(isinstance(item, dict) and valid_text(item.get("id"), 100)
+                          and type(item.get("at")) in (int, float)
+                          and type(item.get("thought", False)) is bool
+                          and math.isfinite(item["at"]) and item["at"] >= 0 for item in history))
+        return state
+    except (ValueError, KeyError, TypeError, OverflowError):
+        raise EatError("Can't read the saved data at {}. Fix or move that file; "
+                       "it has been left untouched.".format(path)) from None
+
+
+def save_state(path, state):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=".eat-", delete=False) as handle:
+            temp_path = Path(handle.name)
+            json.dump(state, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(str(temp_path), str(path))
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+
+
+def menu(state):
+    # A saved personal recipe takes precedence if a catalog update adds the same name.
+    custom_names = {item["name"].strip().casefold() for item in state["meals"]}
+    return [item for item in MEALS if item["name"].casefold() not in custom_names] + state["meals"]
+
+
+def candidates(state, args):
+    prefs = state["preferences"]
+    active = {key: getattr(args, key, False) or prefs.get(key, False) for key in FILTERS}
+    return [item for item in menu(state)
+            if (not active["quick"] or item["minutes"] is not None and item["minutes"] <= 15)
+            and (not active["cheap"] or item["cheap"])
+            and (not active["vegetarian"] or item["vegetarian"])]
+
+
+def pick(options, history):
+    recent = {item["id"] for item in history[-5:]}
+    fresh = [item for item in options if item["id"] not in recent]
+    if fresh:
+        return random.choice(fresh)
+    # A small filtered pool cycles through its least recent choices.
+    last_seen = {item["id"]: index for index, item in enumerate(history)}
+    return min(options, key=lambda item: last_seen.get(item["id"], -1))
+
+
+def streak_entries(history, now):
+    previous = now
+    for item in reversed(history):
+        if not 0 <= previous - item["at"] <= STREAK_SECONDS:
+            break
+        yield item
+        previous = item["at"]
+
+
+def reroll_count(history, now):
+    return sum(1 for _ in streak_entries(history, now)) + 1
+
+
+def describe(item):
+    tags = ["{} min".format(item["minutes"]) if item["minutes"] else "your own pace"]
+    if item["cheap"]:
+        tags.append("cheap")
+    if item["minutes"] and item["minutes"] <= 15:
+        tags.append("quick")
+    if item["vegetarian"]:
+        tags.append("vegetarian")
+    elif item.get("diet"):
+        tags.append(item["diet"])
+    if item.get("method"):
+        tags.append(item["method"])
+    if item["id"].startswith("custom-"):
+        tags.append("personal meal")
+    return " · ".join(tags)
+
+
+def show_meal(chosen, chaos=False, count=1):
+    print("\n  {}.\n".format(chosen["name"]))
+    print("  {}".format(chosen["note"]))
+    print("  {}".format(describe(chosen)))
+    if chaos:
+        print("\n  " + random.choice(CHAOS))
+    if 3 <= count <= MAX_REQUESTS:
+        print("\n  " + REROLL_REMARKS[count - 3])
+    print()
+
+
+def thinking_steps(chosen, options):
+    alternatives = [item for item in options if item["id"] != chosen["id"]]
+    opening = ("Start with {}. Plausible. Keep that in mind.".format(random.choice(alternatives)["name"])
+               if alternatives else "One option fits. Somehow, I can still make this complicated.")
+    practical = ("About {} minutes. Finally, a number that has something to do with dinner.".format(chosen["minutes"])
+                 if chosen["minutes"] else "It's on the menu. That is already more concrete than my last three thoughts.")
+    return [
+        "Okay. Something to eat. This should be a small decision.",
+        opening,
+        "Wait. Is the first idea good, or just the first idea?",
+        "Maybe something familiar. Familiar is easier to picture.",
+        "But easy to picture isn't quite the same as wanting it.",
+        "I could compare every option. That would require another meal.",
+        "No. Narrow it down before this becomes a hobby.",
+        random.choice(TANGENTS),
+        "That has contributed absolutely nothing. Back to the food.",
+        "What about {}? Yes. That seems like an answer.".format(chosen["name"]),
+        practical,
+        "I could keep looking. There might be a slightly better option.",
+        "There will always be a slightly better imaginary option.",
+        "Enough. This one.",
+    ]
+
+
+def reading_time(thought):
+    # Roughly five words per second, with a floor for short beats and a cap for custom names.
+    return max(0.9, min(4.5, len(thought.split()) / 5.0))
+
+
+def thinking_pause(seconds):
+    if sys.stdin.isatty():
+        # Canonical terminal input becomes readable on Enter. No terminal-mode changes
+        # or background reader are needed, and the wait returns as soon as Enter arrives.
+        ready, _, _ = select.select([sys.stdin], [], [], seconds)
+        if ready:
+            sys.stdin.readline()
+            raise SkipThinking
+    else:
+        time.sleep(seconds)
+
+
+def stream_thought(thought, brief=False):
+    streamed_time = 0.0
+    for line in textwrap.wrap(thought, width=74):
+        print("  ", end="", flush=True)
+        words = line.split()
+        for start in range(0, len(words), 3):
+            end = start + 3
+            print(" ".join(words[start:end]), end=" " if end < len(words) else "\n", flush=True)
+            thinking_pause(0.06)
+            streamed_time += 0.06
+    # Leave the completed thought visible before starting the next one.
+    thinking_pause(0.25 if brief else max(0.5, reading_time(thought) - streamed_time))
+    print()
+
+
+def show_overthinking(chosen, options, abbreviated=False):
+    started = time.monotonic()
+    print("\n  Thinking...", flush=True)
+    if sys.stdin.isatty():
+        print("  Press Enter to skip straight to the meal.", flush=True)
+    print()
+    try:
+        steps = thinking_steps(chosen, options)
+        if abbreviated:
+            stream_thought(steps[0], brief=True)
+            unfinished = " ".join(steps[1].split()[:5]).rstrip(".,;:!?")
+            stream_thought(unfinished + "— wait. No. Dinner first.", brief=True)
+            print("  Overthinking interrupted. Let's go with:", flush=True)
+            return
+        for thought in steps:
+            stream_thought(thought)
+    except SkipThinking:
+        print("\n\n  Overthinking skipped. Let's go with:", flush=True)
+        return
+    print("  Thought for {:.1f}s. Let's go with:".format(time.monotonic() - started), flush=True)
+
+
+def suggest(state, args, path, overthink=False):
+    options = candidates(state, args)
+    if not options:
+        raise EatError("Nothing matches those preferences. Try easing one up.")
+    now = time.time()
+    streak = list(streak_entries(state["history"], now))
+    count = len(streak) + 1
+    full_thinking = overthink and not any(item.get("thought", False) for item in streak)
+    chosen = pick(options, state["history"])
+    # Mark the opportunity as used before animating, including when Enter or Ctrl-C
+    # interrupts it, so another request never restarts the same wait in this streak.
+    state["history"] = (state["history"] + [{"id": chosen["id"], "at": now,
+                                             "thought": full_thinking}])[-30:]
+    save_state(path, state)
+    if overthink:
+        show_overthinking(chosen, options, abbreviated=not full_thinking)
+    show_meal(chosen, args.chaos, count)
+    return chosen
+
+
+def run_picker(state, args, path):
+    if reroll_count(state["history"], time.time()) > MAX_REQUESTS:
+        raise EatError("Fifteen suggestions. At this point you're collecting meals.\n"
+                       "     No more suggestions. Run ./eat reset, or take a two-minute break.")
+    terminal = sys.stdout.isatty()
+    if terminal:
+        print("\n  No idea? I've got you.")
+    overthink = terminal and (args.chaos or random.random() < 1 / 6)
+    suggest(state, args, path, overthink=overthink)
+    return 0
+
+
+def positive_minutes(value):
+    try:
+        result = int(value)
+        if result > 0:
+            return result
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError("minutes must be a positive whole number")
+
+
+def add_filters(parser, default=False):
+    parser.add_argument("--quick", action="store_true", default=default,
+                        help="meals taking about 15 minutes or less")
+    parser.add_argument("--cheap", action="store_true", default=default,
+                        help="budget-friendly meals")
+    parser.add_argument("--vegetarian", action="store_true", default=default,
+                        help="vegetarian meals (may include eggs and dairy)")
+
+
+def make_parser():
+    parser = argparse.ArgumentParser(prog="eat", description="Dinner has been decided.",
+                                     epilog="Just run eat: one suggestion, then done. Run it again for another idea. Flags are optional.")
+    add_filters(parser)
+    parser.add_argument("--chaos", action="store_true", help="add questionable reasoning to a reasonable meal")
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("reset", help="clear the request streak and recent picks; keep personal meals and preferences")
+    add = sub.add_parser("add", help="save a personal meal")
+    add.add_argument("name", help="meal name (quote names with spaces)")
+    add.add_argument("--minutes", type=positive_minutes, help="estimated preparation time")
+    add.add_argument("--cheap", action="store_true", default=argparse.SUPPRESS,
+                     help="mark this meal as budget-friendly")
+    add.add_argument("--vegetarian", action="store_true", default=argparse.SUPPRESS,
+                     help="mark this meal as vegetarian")
+    add.add_argument("--note", default="You know what to do.", help="a short cooking hint")
+    listing = sub.add_parser("list", help="show the menu, including personal meals")
+    add_filters(listing, default=argparse.SUPPRESS)
+    return parser
+
+
+def main(argv=None):
+    parser = make_parser()
+    args = parser.parse_args(argv)
+    if args.command and args.chaos:
+        parser.error("--chaos is for meal picks; try eat --chaos")
+    if args.command == "add" and args.quick:
+        parser.error("use add --minutes 15 to mark a personal meal as quick")
+    path = state_path()
+    try:
+        state = load_state(path)
+        if args.command == "reset":
+            state["history"] = []
+            save_state(path, state)
+            print("Fresh start. I've forgotten the indecision. Your meals and preferences are safe.")
+            return 0
+        if args.command == "add":
+            if not valid_text(args.name, 80) or not valid_text(args.note, 240):
+                raise EatError("Use a name of 1–80 characters and a note of 1–240 characters, without control characters.")
+            name = args.name.strip()
+            if any(item["name"].strip().casefold() == name.casefold() for item in MEALS + state["meals"]):
+                raise EatError("{} is already on the menu.".format(name))
+            state["meals"].append(meal("custom-" + uuid.uuid4().hex, name, args.minutes,
+                                       args.cheap, args.vegetarian, args.note.strip()))
+            save_state(path, state)
+            print("Added {}. A future dinner problem, solved.".format(name))
+            return 0
+
+        if args.command == "list":
+            options = candidates(state, args)
+            print("The menu · {} meals\n".format(len(options)))
+            for item in options:
+                print("  {} — {}".format(item["name"], describe(item)))
+            return 0
+
+        return run_picker(state, args, path)
+    except KeyboardInterrupt:
+        print("\n  Dinner can wait. See you soon.\n")
+        return 130
+    except (EatError, OSError) as error:
+        print("eat: {}".format(error), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
